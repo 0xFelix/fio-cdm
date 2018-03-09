@@ -1,23 +1,35 @@
 # fio-cdm
-fioでCrystalDiskMarkっぽい計測を行うコマンド
+
+Mimic CrystalDiskMark 6 on Linux devices with the help of fio
+
+Tested with fio version 3.5
 
 ## Usage
 
 ```
-fio <path>
+fio-cdm <path>
 ```
 
-### sample
+## Notes
+
+Currently the following warning is emitted when running the script:
 
 ```
-# fio-cdm /mnt/sdf1
-|      | Read(MB/s)|Write(MB/s)|
-|------|-----------|-----------|
-|  Seq |    305.307|    138.191|
-| 512K |    275.565|    139.452|
-|   4K |     22.208|     37.098|
-|4KQD32|    210.052|    125.907|
+128K-Q32T1-Seq-Read: No I/O performed by libaio, perhaps try --debug=io option for details?
+128K-Q32T1-Seq-Write: No I/O performed by libaio, perhaps try --debug=io option for details?
 ```
 
-## 参考
-* [LinuxのI/OベンチマークでCrystalDiskMarkと同等の計測をfioで実現 - WinKey](http://www.winkey.jp/article.php/20110310142828679)
+The results of the script seem to be correct but this should be investigated.
+This probably has something to do with the `ramp_time` option.
+
+### Sample
+
+```
+# fio-cdm /mnt/bc35
+|           | Read(MB/s)|Write(MB/s)|
+|-----------|-----------|-----------|
+| Seq Q32T1 |    183.000|    148.000|
+| 4K  Q8T8  |      1.114|      1.229|
+| 4K  Q32T1 |      1.519|      0.888|
+| 4K  Q1T1  |      0.621|      0.965|
+```
