@@ -1,88 +1,116 @@
 #!/bin/sh
 
 TARGET="$1"
+FIOCMD="fio"
 
 fio2cdm() {
     awk '
-    /^Seq-Read:/          {getline;if($1~/^read/) {seqread =$4}}
-    /^Seq-Write:/         {getline;if($1~/^write/){seqwrite=$3}}
-    /^Rand-Read-512K:/    {getline;if($1~/^read/) {rread512 =$4}}
-    /^Rand-Write-512K:/   {getline;if($1~/^write/){rwrite512=$3}}
-    /^Rand-Read-4K:/      {getline;if($1~/^read/) {rread4 =$4}}
-    /^Rand-Write-4K:/     {getline;if($1~/^write/){rwrite4=$3}}
-    /^Rand-Read-4K-QD32:/ {getline;if($1~/^read/) {rread4qd32 =$4}}
-    /^Rand-Write-4K-QD32:/{getline;if($1~/^write/){rwrite4qd32=$3}}
+    /^128K-Q32T1-Seq-Read:/ {getline;if($1~/^read/){r128kq32t1seqread=$4}}
+    /^4K-Q8T8-Rand-Read:/   {getline;if($1~/^read/){r4kq8t8randread=$4}}
+    /^4K-Q32T1-Rand-Read:/  {getline;if($1~/^read/){r4kq32t1randread=$4}}
+    /^4K-Q1T1-Rand-Read:/   {getline;if($1~/^read/){r4kq1t1randread=$4}}
+    /^128K-Q32T1-Seq-Write:/{getline;if($1~/^write/){r128kq32t1seqwrite=$4}}
+    /^4K-Q8T8-Rand-Write:/  {getline;if($1~/^write/){r4kq8t8randwrite=$4}}
+    /^4K-Q32T1-Rand-Write:/ {getline;if($1~/^write/){r4kq32t1randwrite=$4}}
+    /^4K-Q1T1-Rand-Write:/  {getline;if($1~/^write/){r4kq1t1randwrite=$4}}
+
     function n(i) {
-    	split(gensub(/bw=([0-9.]+)(([KM]?)B\/s,)?/,"\\1 \\3", "g", i), a);
-	s = a[1]; u = a[2];
-	if(u == "K") {s /= 1024}
-	if(u == "")  {s /= 1024 * 1024}
+        split(gensub(/\(([0-9.]+)(([kM]?)B\/s)\)?/,"\\1 \\3 ", "g", i), a);
+
+        s = a[1];
+        u = a[2];
+
+        if (u == "k") {
+            s /= 1024
+        }
+
+        if (u == "") {
+            s /= 1024 * 1024
+        }
+
 	return s;
     }
+
     END {
-    	print ("|      | Read(MB/s)|Write(MB/s)|");
-	print ("|------|-----------|-----------|");
-        printf("|  Seq |%11.3f|%11.3f|\n", n(seqread),   n(seqwrite));
-        printf("| 512K |%11.3f|%11.3f|\n", n(rread512),  n(rwrite512));
-        printf("|   4K |%11.3f|%11.3f|\n", n(rread4),    n(rwrite4));
-        printf("|4KQD32|%11.3f|%11.3f|\n", n(rread4qd32),n(rwrite4qd32));
+        print ("|           | Read(MB/s)|Write(MB/s)|");
+        print ("|-----------|-----------|-----------|");
+        printf("| Seq Q32T1 |%11.3f|%11.3f|\n", n(r128kq32t1seqread), n(r128kq32t1seqwrite));
+        printf("| 4K  Q8T8  |%11.3f|%11.3f|\n", n(r4kq8t8randread),   n(r4kq8t8randwrite));
+        printf("| 4K  Q32T1 |%11.3f|%11.3f|\n", n(r4kq32t1randread),  n(r4kq32t1randwrite));
+        printf("| 4K  Q1T1  |%11.3f|%11.3f|\n", n(r4kq1t1randread),   n(r4kq1t1randwrite));
     }
     '
 }
 
 trap "rm -f ${TARGET}/.fio-diskmark" 0 1 2 3 9 15
 
-# see. http://www.winkey.jp/article.php/20110310142828679
-cat <<_EOL_ | fio - | fio2cdm
+cat <<_EOL_ | "$FIOCMD" - | fio2cdm
 [global]
 ioengine=libaio
-iodepth=1
-size=1g
-direct=1
-runtime=60
+group_reporting
 directory=${TARGET}
 filename=.fio-diskmark
+# CDM default test size is 1G
+size=1G
+# CDM disables the use of caches
+direct=1
+# CDM waits 5 seconds for measurements to settle
+ramp_time=5s
+# CDM runs 5 consecutive tests for 5 seconds each
+runtime=25s
+# Make sure we use random values each time
+refill_buffers
+norandommap
+randrepeat=0
+allrandrepeat=0
 
-[Seq-Read]
-bs=1m
+[128K-Q32T1-Seq-Read]
 rw=read
+bs=128K
+iodepth=32
 stonewall
 
-[Seq-Write]
-bs=1m
+[4K-Q8T8-Rand-Read]
+rw=randread
+bs=4K
+iodepth=8
+numjobs=8
+stonewall
+
+[4K-Q32T1-Rand-Read]
+rw=randread
+bs=4K
+iodepth=32
+stonewall
+
+[4K-Q1T1-Rand-Read]
+rw=randread
+bs=4K
+iodepth=1
+stonewall
+
+[128K-Q32T1-Seq-Write]
 rw=write
-stonewall
-
-[Rand-Read-512K]
-bs=512k
-rw=randread
-stonewall
-
-[Rand-Write-512K]
-bs=512k
-rw=randwrite
-stonewall
-
-[Rand-Read-4K]
-bs=4k
-rw=randread
-stonewall
-
-[Rand-Write-4K]
-bs=4k
-rw=randwrite
-stonewall
-
-[Rand-Read-4K-QD32]
+bs=128K
 iodepth=32
-bs=4k
-rw=randread
 stonewall
 
-[Rand-Write-4K-QD32]
-iodepth=32
-bs=4k
+[4K-Q8T8-Rand-Write]
 rw=randwrite
+bs=4K
+iodepth=8
+numjobs=8
+stonewall
+
+[4K-Q32T1-Rand-Write]
+rw=randwrite
+bs=4K
+iodepth=32
+stonewall
+
+[4K-Q1T1-Rand-Write]
+rw=randwrite
+bs=4K
+iodepth=1
 stonewall
 _EOL_
-
