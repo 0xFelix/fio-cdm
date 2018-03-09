@@ -10,6 +10,9 @@ Tested with fio version 3.5
 fio-cdm <path>
 ```
 
+If using a custom build fio change `FIOCMD` to the absolute path of the fio binary.
+
+
 ## Notes
 
 Currently the following warning is emitted when running the script:
